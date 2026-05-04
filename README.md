@@ -6,26 +6,18 @@ This pipeline is designed to be engine-agnostic and easily adaptable to any arch
 
 ## Features
 
-- **Hybrid OCR Strategy**: Leverage **Surya** for state-of-the-art layout analysis and printed text recognition, with built-in hooks for **Loghi HTR** for handwritten content.
+- **Hybrid OCR Strategy**: Leverage **Surya** for state-of-the-art layout analysis and printed text recognition, with built-in hooks for **Loghi HTR**.
+- **Dynamic Section Discovery**: Automatically identifies page types (Name Register, Street Register, Ads) using Vision+LLM to route them to the correct extraction schema without manual mapping.
 - **Hardware Agnostic**: Run on everything from developer laptops (CPU/MPS) to high-performance clusters (NVIDIA CUDA) and Windows workstations (AMD DirectML).
-- **Automated Classification**: Logic to detect "Print" vs "Handwritten" pages and route them to the appropriate recognition engine automatically.
-- **LLM-Powered Structuring**: Uses Gemini (via OpenRouter or Google AI Studio) to correct OCR errors, expand abbreviations, and transform text into validated JSON schemas.
-- **Pipelined Throughput**: Concurrent execution of OCR and LLM stages to maximize hardware utilization.
-- **Archival Export**: Generates structured JSON, ALTO XML, and SQLite databases ready for public-facing websites or research analysis.
-
-## Adapting to a New Source
-
-To use this pipeline for a new document or collection:
-
-1.  **Define Sections**: Update `pipeline/config.py` with the page ranges and logical sections of your document.
-2.  **Tailor Prompts**: Create or modify the text files in `pipeline/prompts/` to define the JSON schema and extraction rules for your specific data.
-3.  **Configure Recognition**: Set your default `OCR_STRATEGY` (e.g., `surya` for clean print, `loghi` for HTR, or `auto` for mixed content).
+- **vLLM (Local LLM) Support**: Support for local high-performance vision models (e.g., Florence-2, Llava) via vLLM on GPU hardware, removing per-token API costs.
+- **Multi-Worker Pipelining**: Highly parallelized execution of OCR and LLM stages, optimized for high-memory environments like the DGX Spark.
+- **Rich Export Formats**: Generates structured JSON, **ALTO XML (v4.4)**, **PageXML**, and SQLite databases ready for research and publication.
 
 ## Repository Structure
 
 - `pipeline/`: Core logic for OCR orchestration, LLM interfacing, and data alignment.
 - `scripts/`: Shared utilities for geocoding, database builds, and post-processing.
-- `viewer/`: A local web interface for quality assurance and verification of results.
+- `docs/`: In-depth architecture and design documentation.
 - `requirements.txt`: Python dependencies.
 
 ## Quick Start
@@ -35,26 +27,35 @@ To use this pipeline for a new document or collection:
    python3 -m venv .venv
    source .venv/bin/activate
    pip install -r requirements.txt
-   pip install surya-ocr
    ```
 
 2. **Configuration**:
-   Copy your scans into `scans/` and create `pipeline/config_local.py` with your API keys:
+   Place your scans in `scans/` and create `pipeline/config_local.py`. 
+   
+   For **Gemini API**:
    ```python
-   OPENROUTER_API_KEY = "your-key"
-   LLM_PROVIDER = "openrouter"
+   GOOGLE_AI_API_KEY = "your-key"
+   LLM_PROVIDER = "google"
+   ```
+   
+   For **Local vLLM** (DGX/High-end GPU):
+   ```python
+   LLM_PROVIDER = "vllm"
+   VLLM_API_BASE = "http://localhost:8000/v1"
+   LLM_WORKERS = 4
    ```
 
 3. **Execution**:
    ```bash
-   python pipeline/run_pipeline.py --strategy auto --device auto
+   python run_pipeline.py --strategy auto --device auto
    ```
 
 ## Specialized Branches
 
 We maintain environment-specific optimizations:
+- `main`: The stable, engine-agnostic core.
 - `pipeline-windows`: Tuned for Windows/WSL2 with AMD GPU support (DirectML).
-- `pipeline-dgx-spark`: Optimized for high-concurrency cluster environments (NVIDIA/CUDA).
+- `pipeline-dgx-spark`: Optimized for high-concurrency cluster environments (NVIDIA/CUDA/vLLM).
 
 ## License
 
