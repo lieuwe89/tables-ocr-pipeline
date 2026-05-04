@@ -114,6 +114,15 @@ def init_gemini(model_override: str | None = None):
         _client = genai
         _client_model = GEMINI_MODEL
         logger.info(f"LLM (Google AI) initialized with model: {_client_model}")
+    elif LLM_PROVIDER == "vllm":
+        from openai import OpenAI
+        from pipeline.config import VLLM_API_BASE, VLLM_MODEL
+        _client = OpenAI(
+            base_url=VLLM_API_BASE,
+            api_key="vllm-token", # Placeholder
+        )
+        _client_model = model_override or VLLM_MODEL
+        logger.info(f"LLM (vLLM) initialized with model: {_client_model} at {VLLM_API_BASE}")
     else:
         raise ValueError(f"Unknown LLM_PROVIDER: {LLM_PROVIDER!r}")
 
@@ -165,6 +174,38 @@ def _call_openrouter(prompt: str, image_path: Path, timeout: int = 120) -> tuple
     return (response.choices[0].message.content or ""), usage
 
 
+def _call_vllm(prompt: str, image_path: Path, timeout: int = 120) -> tuple[str, dict]:
+    """Send prompt + image via local vLLM OpenAI-compatible API."""
+    response = _client.chat.completions.create(
+        model=_client_model,
+        timeout=timeout,
+        temperature=0.1,
+        max_tokens=32768,
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": _encode_image_data_url(image_path)},
+                    },
+                ],
+            }
+        ],
+    )
+    usage = {}
+    if getattr(response, "usage", None):
+        u = response.usage
+        usage = {
+            "model": _client_model,
+            "prompt_tokens": getattr(u, "prompt_tokens", None),
+            "completion_tokens": getattr(u, "completion_tokens", None),
+            "total_tokens": getattr(u, "total_tokens", None),
+        }
+    return (response.choices[0].message.content or ""), usage
+
+
 def _call_google(prompt: str, image_path: Path, timeout: int = 120) -> tuple[str, dict]:
     """Send prompt + image via the Google AI Studio SDK."""
     from PIL import Image as PILImage
@@ -194,6 +235,8 @@ def _call_google(prompt: str, image_path: Path, timeout: int = 120) -> tuple[str
 def _call_llm(prompt: str, image_path: Path, timeout: int = 120) -> tuple[str, dict]:
     if LLM_PROVIDER == "openrouter":
         return _call_openrouter(prompt, image_path, timeout=timeout)
+    elif LLM_PROVIDER == "vllm":
+        return _call_vllm(prompt, image_path, timeout=timeout)
     return _call_google(prompt, image_path, timeout=timeout)
 
 
