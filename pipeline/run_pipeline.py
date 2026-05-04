@@ -50,6 +50,7 @@ from pipeline.ocr import run_ocr, OcrPage
 from pipeline.llm import process_page_with_gemini, init_gemini, load_checkpoint, save_checkpoint, is_page_completed
 from pipeline.align import align_page
 from pipeline.alto_export import export_page_alto
+from pipeline.pagexml_export import export_page_xml
 from pipeline.json_export import export_page_json, build_combined_indexes
 
 
@@ -476,6 +477,7 @@ def stage_align_and_export(
 
         try:
             export_page_alto(ocr_page, aligned)
+            export_page_xml(ocr_page, aligned)
             export_page_json(ocr_page, aligned)
         except Exception as e:
             logger.error(f"  Export failed for {filename}: {e}")
@@ -772,6 +774,7 @@ def main():
     logger.info(f"  Output directory: {OUTPUT_DIR}")
     logger.info(f"  hOCR files: {OUTPUT_DIR / 'hocr'}")
     logger.info(f"  ALTO XML files: {OUTPUT_DIR / 'alto'}")
+    logger.info(f"  PageXML files: {OUTPUT_DIR / 'pagexml'}")
     logger.info(f"  JSON files: {OUTPUT_DIR / 'json'}")
     logger.info(f"  Combined indexes: {OUTPUT_DIR / 'combined'}")
     

@@ -25,6 +25,7 @@ LLM_RAW_DIR = OUTPUT_DIR / "llm_raw"  # Per-page raw LLM responses (pre-alignmen
 LLM_USAGE_DIR = OUTPUT_DIR / "llm_usage"  # Per-page token usage sidecars
 FAILURES_DIR = OUTPUT_DIR / "failures"  # Per-page structured failure records
 COMBINED_DIR = OUTPUT_DIR / "combined"
+PAGEXML_DIR = OUTPUT_DIR / "pagexml"
 
 # Prompts directory
 PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
