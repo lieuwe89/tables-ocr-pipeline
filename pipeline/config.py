@@ -53,6 +53,10 @@ OPENROUTER_MODEL = "google/gemini-2.0-flash-001"
 # more verbose-tolerant model. Set to None to disable.
 OPENROUTER_FALLBACK_MODEL = "google/gemini-2.5-flash"
 
+# vLLM (Local DGX Spark Backend)
+VLLM_API_BASE = os.environ.get("VLLM_API_BASE", "http://localhost:8000/v1")
+VLLM_MODEL = os.environ.get("VLLM_MODEL", "microsoft/Florence-2-large")
+
 # Rate limiting. OpenRouter has no per-minute cap on its end for paid usage,
 # but we still pace requests to be polite and stay under upstream provider limits.
 GEMINI_REQUESTS_PER_MINUTE = 30  # ~2s spacing

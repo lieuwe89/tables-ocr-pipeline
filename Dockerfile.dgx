@@ -1,0 +1,63 @@
+# Use a CUDA-enabled base image for GPU acceleration on DGX Spark
+FROM nvidia/cuda:12.1.1-devel-ubuntu22.04 AS builder
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3.10 \
+    python3-pip \
+    python3-dev \
+    tesseract-ocr \
+    tesseract-ocr-nld \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip3 install --no-cache-dir --upgrade pip && \
+    pip3 install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121 && \
+    pip3 install --no-cache-dir -r requirements.txt
+
+# Final stage: smaller runtime image
+FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
+
+# Copy system deps from builder if needed, but for simplicity we'll just install them again
+# (Actually, runtime images are much smaller, but we need tesseract and python)
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y \
+    python3.10 \
+    python3-pip \
+    tesseract-ocr \
+    tesseract-ocr-nld \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy installed packages from builder
+COPY --from=builder /usr/local/lib/python3.10/dist-packages /usr/local/lib/python3.10/dist-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Copy application code
+COPY . .
+
+# Create necessary directories
+RUN mkdir -p output/hocr output/alto output/pagexml output/json output/llm_raw output/combined scans
+
+# Environment variables for the pipeline
+ENV OCR_STRATEGY=auto \
+    OCR_DEVICE=cuda \
+    LLM_PROVIDER=google
+
+# Entrypoint
+ENTRYPOINT ["python3", "run_pipeline.py"]
