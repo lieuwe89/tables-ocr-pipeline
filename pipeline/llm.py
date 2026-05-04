@@ -291,6 +291,32 @@ def _extract_json_from_response(response_text: str) -> dict:
     return json.loads(text)
 
 
+def identify_page_section(scan_image_path: Path, ocr_page: OcrPage) -> str:
+    """
+    Use Gemini to identify the section type of a page based on its visual
+    layout and a snippet of OCR text.
+    """
+    prompt_template = load_prompt("classify_section.txt")
+    
+    # Use first 50 words as a representative sample
+    sample_words = ocr_page.all_words[:50]
+    sample_text = " ".join(w.text for w in sample_words)
+    
+    prompt = prompt_template.format(ocr_sample=sample_text)
+    
+    logger.info(f"  Identifying section for {scan_image_path.name}...")
+    response_text, _ = _call_llm(prompt, scan_image_path, timeout=60)
+    
+    try:
+        result = _extract_json_from_response(response_text)
+        section = result.get("section", "other")
+        logger.info(f"  → Identified as '{section}' (reason: {result.get('reasoning', 'none')})")
+        return section
+    except Exception as e:
+        logger.warning(f"  Section identification failed: {e}")
+        return "other"
+
+
 def process_page_with_gemini(
     scan_image_path: Path,
     ocr_page: OcrPage,
@@ -315,11 +341,19 @@ def process_page_with_gemini(
     # Determine which prompt to use
     if section_override:
         section_type = section_override
-        prompt_file = f"{section_override}.txt"
     elif page_number is not None:
-        section_type, prompt_file = get_section_for_page(page_number)
+        section_type, _, _ = get_section_for_page(page_number)
     else:
-        section_type, prompt_file = "generic", "generic.txt"
+        section_type = "generic"
+
+    # Auto-identify if we are generic/unknown and not in the very first pages
+    if section_type in ("generic", "other", "unknown") and (page_number is None or page_number > 5):
+        section_type = identify_page_section(scan_image_path, ocr_page)
+
+    prompt_file = f"{section_type}.txt"
+    if not (PROMPTS_DIR / prompt_file).exists():
+        logger.warning(f"  Prompt file {prompt_file} missing, falling back to generic.txt")
+        prompt_file = "generic.txt"
 
     logger.info(
         f"Processing {scan_image_path.name} as '{section_type}' "
@@ -349,6 +383,11 @@ def process_page_with_gemini(
                 continue
 
             result = _extract_json_from_response(response_text)
+            
+            # Ensure the section type is preserved in the result
+            if "section" not in result:
+                result["section"] = section_type
+                
             _save_usage_sidecar(scan_image_path, usage, attempt, section_type)
             _clear_failure(scan_image_path)
             logger.info(
