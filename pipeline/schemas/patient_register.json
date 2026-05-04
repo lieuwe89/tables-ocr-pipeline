@@ -1,0 +1,68 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "page_number": { "type": "integer" },
+    "section": { "type": "string" },
+    "header": {
+      "type": "object",
+      "properties": {
+        "text": { "type": "string" },
+        "word_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "footer": {
+      "type": "object",
+      "properties": {
+        "text": { "type": "string" },
+        "word_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "description": "Unique stable hash for this entry" },
+          "nummer": { "type": "string" },
+          "voornaam": { "type": "string" },
+          "achternaam": { "type": "string" },
+          "ouderdom": { "type": "string" },
+          "geboorteplaats": { "type": "string" },
+          "woonplaats": { "type": "string" },
+          "beroep": { "type": "string" },
+          "gehuwd_ongehuwd": { "type": "string" },
+          "aantal_kinderen": { "type": "string" },
+          "godsdienst": { "type": "string" },
+          "vader_voornaam": { "type": "string" },
+          "vader_achternaam": { "type": "string" },
+          "vader_beroep": { "type": "string" },
+          "vader_woonplaats": { "type": "string" },
+          "moeder_voornaam": { "type": "string" },
+          "moeder_achternaam": { "type": "string" },
+          "moeder_beroep": { "type": "string" },
+          "moeder_woonplaats": { "type": "string" },
+          "datum_ingekomen": { "type": "string" },
+          "datum_uitgegaan": { "type": "string" },
+          "datum_overleden": { "type": ["string", "null"] },
+          "betaler": { "type": "string", "description": "Op wiens last verpleging" },
+          "ziekte_aard": { "type": "string" },
+          "behandelaar": { "type": "string" },
+          "aanmerkingen": { "type": ["string", "null"] },
+          "word_ids": { "type": "array", "items": { "type": "string" }, "description": "ALL word IDs for this entire row/entry" },
+          "field_word_ids": {
+            "type": "object",
+            "properties": {
+              "naam": { "type": "array", "items": { "type": "string" } },
+              "data": { "type": "array", "items": { "type": "string" } },
+              "medisch": { "type": "array", "items": { "type": "string" } }
+            },
+            "description": "Optional grouped word IDs for better spatial alignment"
+          }
+        },
+        "required": ["nummer", "voornaam", "achternaam", "word_ids"]
+      }
+    }
+  },
+  "required": ["entries"]
+}
