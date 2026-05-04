@@ -59,3 +59,14 @@ class OcrPage:
     def to_numbered_word_list(self) -> str:
         """Format words as a numbered list for the LLM prompt."""
         return "\n".join(f"{w.id}: {w.text}" for w in self.all_words)
+
+    @property
+    def full_text(self) -> str:
+        """The full page text in reading order."""
+        lines = []
+        for block in self.blocks:
+            for line in block.lines:
+                text = " ".join(w.text for w in line.words).strip()
+                if text:
+                    lines.append(text)
+        return "\n".join(lines)
