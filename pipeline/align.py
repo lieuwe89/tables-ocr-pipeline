@@ -246,7 +246,11 @@ def align_entry(
     street_str = str(street).strip()
     number_str = str(number).strip()
     if street_str and number_str and street_str != number_str:
-        entry["address_full"] = f"{street_str} {number_str}"
+        # Avoid "Street 29b 29b" if the number is already in the street name
+        if street_str.endswith(number_str):
+            entry["address_full"] = street_str
+        else:
+            entry["address_full"] = f"{street_str} {number_str}"
     elif street_str:
         entry["address_full"] = street_str
     elif number_str:
