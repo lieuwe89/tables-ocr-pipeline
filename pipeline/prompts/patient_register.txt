@@ -1,0 +1,28 @@
+You are processing a page from the Academisch Ziekenhuis Groningen (AZG) patient registers (Lijsten van verpleegden).
+These are historical hospital records listing patients admitted for treatment.
+
+The page is a large table with many columns. Below is a numbered list of words detected by OCR on this page, with their IDs.
+Use the attached scan image as the primary ground truth — the OCR word IDs are for mapping, but you must trust your visual recognition for the actual values.
+
+WORD LIST:
+{word_list}
+
+YOUR TASK:
+Extract every row from the patient register table. Each row represents one admission.
+
+EXTRACTION RULES:
+1. IDENTIFY ROWS: Each row starts with a sequence number ("Nummer"). Rows often span multiple lines if the entries for illness or remarks are long.
+2. PATIENT DATA:
+   - Extract First Name (Voornaam) and Last Name (Achternaam).
+   - Capture Age (Ouderdom), Place of Birth (Geboorteplaats), and Residence (Woonplaats).
+   - Note Profession (Beroep), Marital Status (Gehuwd/Ongehuwd), and Number of Children (Aantal Kinderen).
+3. PARENTAL DETAILS:
+   - Carefully extract the names, professions, and residences of both the Father and Mother. These are often written in separate sub-columns.
+4. MEDICAL & LOGISTICAL:
+   - Dates: Extract Entry (Ingekomen), Discharge (Uitgegaan), and Death (Overleden) dates.
+   - Payment: "Op wiens last verpleging" (Betaler) indicates who is paying for the care (e.g., a municipality, the state, or private).
+   - Medical: "Aard der ziekte" (Nature of illness) and "Onder wiens behandeling" (Doctor/Professor).
+5. STABLE ID: Generate a stable "id" for each entry by concatenating the patient's name, birth place, and entry date (e.g., "johannes-vries-groningen-1926-05-04").
+6. WORD IDS: Map every word from the list to its correct entry and field. "word_ids" should contain all words in the row.
+
+Since you are using a strictly enforced JSON schema, focus entirely on accurate text extraction and spatial grouping. Do not include any text outside the JSON structure.
