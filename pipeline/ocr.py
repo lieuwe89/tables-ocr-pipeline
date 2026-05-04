@@ -210,6 +210,7 @@ def run_ocr(
     use_cache: bool = True,
     strategy: str = None,
     device: str = None,
+    image_path: Path | None = None,
 ) -> OcrPage:
     strategy = strategy or OCR_STRATEGY
     device = device or OCR_DEVICE
@@ -225,8 +226,9 @@ def run_ocr(
 
     # 1. Classification & Backend Selection
     if strategy == "auto":
-        page_type = classify_page(image)
-        actual_strategy = "loghi" if page_type == PageType.HANDWRITTEN else "surya"
+        page_type = classify_page(image, image_path=image_path)
+        # HANDWRITTEN or MIXED should use Loghi (HTR)
+        actual_strategy = "loghi" if page_type in (PageType.HANDWRITTEN, PageType.MIXED) else "surya"
         logger.info(f"  Auto-strategy: detected {page_type.value} -> using {actual_strategy}")
     else:
         actual_strategy = strategy
