@@ -1,0 +1,88 @@
+You are processing a page from a 1926 Dutch address book (Adresboek van de Gemeente Groningen, 1926).
+This page is from the ALPHABETICAL NAME REGISTER (Alphabetisch Naamregister) section.
+
+The page has a two-column layout with dense entries listing residents of Groningen.
+
+Below is a numbered list of words detected by OCR on this page, with their IDs.
+The OCR may contain errors. Use the attached scan image as the ground truth — trust what you SEE over the OCR text.
+
+WORD LIST:
+{word_list}
+
+YOUR TASK:
+Parse every entry on this page. Each entry represents one person or business.
+
+For each entry, extract:
+- "name": Family name
+- "initials": First name initials (e.g., "M.E.")
+- "name_prefix": Titles, honorifics, marital status (e.g., "Mej.", "Wed.", "Dr.")
+- "name_prefix_expanded": Full form of the prefix (e.g., "Mejuffrouw", "Weduwe", "Doctor")
+- "occupation": The person's occupation or business description, as written
+- "occupation_expanded": Full form if abbreviated (e.g., "Loodg.kn." → "Loodgietersknecht")
+- "address_street": Street name as written on the page
+- "address_street_expanded": Full street name if abbreviated (e.g., "Gr. Kruisstr." → "Groote Kruisstraat")
+- "address_number": House number (including suffixes like "a", "1e kl.")
+- "phone": Telephone number if present (prefixed with "Tel.")
+- "cross_references": Any references like "Zie adv. blz. 135" → {{"type": "advertisement", "page": 135}}
+- "word_ids": List of ALL word IDs that belong to this entry
+- "name_word_ids": Word IDs forming the name (family name + initials + prefix)
+- "address_word_ids": Word IDs forming the address (street + number)
+- "notes": Any other information not fitting above categories
+
+Also identify:
+- "header": Any page header text (e.g., steamship company advertisements at top)
+- "footer": Any page footer text (e.g., printer advertisements at bottom)
+- "page_number": The printed page number visible on the scan
+
+IMPORTANT RULES:
+1. Entries often span the boundary between the two columns. Read the LEFT column top-to-bottom first, then the RIGHT column.
+2. Some entries span multiple lines. Group them correctly — look for continuation lines that are indented.
+3. Bold names indicate a business rather than a person.
+4. Common Dutch abbreviations in this book:
+   - Wed. = Weduwe (widow of)
+   - Mej. = Mejuffrouw (Miss)
+   - Geb. = Geboren (born as)
+   - v/h. = voorheen (formerly)
+   - Kzn. = Kleinzoon (grandson)
+   - kn. = knecht (worker/journeyman)
+   - Gr. = Groote (Great)
+   - str. = straat (street)
+   - pl. = plein (square)
+   - N.S. = Noordzijde / Nieuw Stads... (context-dependent)
+   - Bankw. = Bankwerker
+   - Loodg. = Loodgieter
+   - Timmerm. = Timmerman
+   - Fabr. = Fabriek/Fabrikant
+   - Handelsr. = Handelsreiziger
+   - Magazijnkn. = Magazijnknecht
+   - Rijkstelw. = Rijkstelefoniste
+   - Electr. = Electricien
+5. If you see "Zie adv. blz. NNN" or similar, capture it as a cross_reference.
+6. If an OCR word is clearly wrong based on the scan image, use the correct text and note the correction.
+
+Return ONLY valid JSON in this exact format:
+{{
+  "page_number": <int>,
+  "section": "name_register",
+  "header": {{"text": "...", "word_ids": [...]}},
+  "footer": {{"text": "...", "word_ids": [...]}},
+  "entries": [
+    {{
+      "name": "...",
+      "initials": "...",
+      "name_prefix": "...",
+      "name_prefix_expanded": "...",
+      "occupation": "...",
+      "occupation_expanded": "...",
+      "address_street": "...",
+      "address_street_expanded": "...",
+      "address_number": "...",
+      "phone": null,
+      "cross_references": [],
+      "word_ids": ["w_0001", "w_0002", ...],
+      "name_word_ids": ["w_0001", "w_0002"],
+      "address_word_ids": ["w_0010", "w_0011"],
+      "notes": null
+    }}
+  ]
+}}

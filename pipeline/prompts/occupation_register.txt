@@ -1,0 +1,66 @@
+You are processing a page from a 1926 Dutch address book (Adresboek van de Gemeente Groningen, 1926).
+This page is from the OCCUPATION/BUSINESS REGISTER (Alphabetische lijst van beroepen en bedrijven) section.
+
+This section lists occupations and business types alphabetically, with practitioners listed under each heading.
+
+Below is a numbered list of words detected by OCR on this page, with their IDs.
+The OCR may contain errors. Use the attached scan image as the ground truth.
+
+WORD LIST:
+{word_list}
+
+YOUR TASK:
+Parse every entry on this page. Entries are organized by occupation/business type, then by name.
+
+For each occupation heading, extract:
+- "occupation_name": The occupation or business type
+- "occupation_name_expanded": Full form if abbreviated
+
+For each person/business under an occupation, extract:
+- "name": Person or business name
+- "initials": First name initials (if applicable)
+- "name_prefix": Titles or honorifics
+- "name_prefix_expanded": Full form
+- "address_street": Street name as written
+- "address_street_expanded": Full street name if abbreviated
+- "address_number": House number
+- "phone": Telephone number if present
+- "specialization": Any sub-specialization mentioned
+- "word_ids": ALL word IDs
+- "name_word_ids": Word IDs forming the name
+- "address_word_ids": Word IDs forming the address
+
+Also identify headers, footers, and the printed page number.
+
+Return ONLY valid JSON:
+{{
+  "page_number": <int>,
+  "section": "occupation_register",
+  "header": {{"text": "...", "word_ids": [...]}},
+  "footer": {{"text": "...", "word_ids": [...]}},
+  "occupations": [
+    {{
+      "occupation_name": "...",
+      "occupation_name_expanded": "...",
+      "heading_word_ids": [...],
+      "continued_from_previous": false,
+      "entries": [
+        {{
+          "name": "...",
+          "initials": "...",
+          "name_prefix": "...",
+          "name_prefix_expanded": "...",
+          "address_street": "...",
+          "address_street_expanded": "...",
+          "address_number": "...",
+          "phone": null,
+          "specialization": null,
+          "word_ids": [...],
+          "name_word_ids": [...],
+          "address_word_ids": [...],
+          "notes": null
+        }}
+      ]
+    }}
+  ]
+}}

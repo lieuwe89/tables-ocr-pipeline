@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <title>Groninger Adresboek 1926 — Viewer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, sans-serif;
+      font-size: 13px;
+      background: #1a1a1a;
+      color: #e0e0e0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── top nav bar ── */
+    #navbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: #2a2a2a;
+      border-bottom: 1px solid #444;
+      flex-shrink: 0;
+    }
+    #navbar button {
+      padding: 4px 10px;
+      background: #444;
+      color: #e0e0e0;
+      border: 1px solid #666;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    #navbar button:hover { background: #555; }
+    #navbar button:disabled { opacity: 0.4; cursor: default; }
+    #page-select {
+      padding: 4px 6px;
+      background: #333;
+      color: #e0e0e0;
+      border: 1px solid #555;
+      border-radius: 4px;
+      max-width: 260px;
+    }
+    #page-info { color: #aaa; font-size: 12px; }
+    #legend {
+      display: flex;
+      gap: 12px;
+      margin-left: auto;
+      font-size: 12px;
+      align-items: center;
+    }
+    .leg { display: flex; align-items: center; gap: 4px; }
+    .leg-box {
+      width: 14px; height: 10px;
+      border-radius: 2px;
+      border: 1px solid rgba(255,255,255,0.3);
+    }
+
+    /* ── main area ── */
+    #main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── scan + overlay panel ── */
+    #scan-panel {
+      flex: 1;
+      overflow: auto;
+      position: relative;
+      background: #111;
+    }
+    #scan-container {
+      position: relative;
+      display: inline-block;
+    }
+    #scan-img {
+      display: block;
+      max-width: 100%;
+      height: auto;
+      user-select: none;
+    }
+    #overlay {
+      position: absolute;
+      top: 0; left: 0;
+      pointer-events: none;
+    }
+
+    /* ── sidebar ── */
+    #sidebar {
+      width: 320px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      background: #222;
+      border-left: 1px solid #444;
+      overflow: hidden;
+    }
+    #sidebar-header {
+      padding: 8px 12px;
+      background: #2a2a2a;
+      border-bottom: 1px solid #444;
+      font-weight: 600;
+      font-size: 12px;
+      color: #bbb;
+    }
+    #entry-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px 0;
+    }
+    .entry-item {
+      padding: 6px 12px;
+      cursor: pointer;
+      border-bottom: 1px solid #2e2e2e;
+      line-height: 1.4;
+    }
+    .entry-item:hover { background: #2d3a4a; }
+    .entry-item.active { background: #1a3a5c; border-left: 3px solid #4a9eff; }
+    .entry-name { font-weight: 600; color: #e8e8e8; }
+    .entry-meta { color: #999; font-size: 11px; }
+    .entry-addr { color: #7eb8f7; font-size: 11px; }
+
+    /* ── detail panel ── */
+    #detail {
+      border-top: 1px solid #444;
+      padding: 10px 12px;
+      background: #1c1c1c;
+      font-size: 12px;
+      max-height: 260px;
+      overflow-y: auto;
+    }
+    #detail h3 { font-size: 13px; margin-bottom: 8px; color: #ccc; }
+    .field { display: flex; gap: 8px; margin-bottom: 4px; }
+    .field-label { color: #888; min-width: 90px; }
+    .field-value { color: #ddd; }
+    #detail-empty { color: #666; font-style: italic; }
+
+    /* ── tooltip ── */
+    #tooltip {
+      position: fixed;
+      background: rgba(20,30,40,0.95);
+      border: 1px solid #4a9eff;
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-size: 12px;
+      pointer-events: none;
+      z-index: 1000;
+      max-width: 280px;
+      display: none;
+    }
+    #tooltip .tt-name { font-weight: 600; color: #e8e8e8; }
+    #tooltip .tt-occ  { color: #bbb; }
+    #tooltip .tt-addr { color: #7eb8f7; }
+
+    /* ── loading state ── */
+    #loading {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.6);
+      font-size: 16px;
+      color: #ccc;
+    }
+  </style>
+</head>
+<body>
+
+<div id="navbar">
+  <button id="btn-prev">◀</button>
+  <select id="page-select"></select>
+  <button id="btn-next">▶</button>
+  <span id="page-info"></span>
+  <div id="legend">
+    <div class="leg"><div class="leg-box" style="background:rgba(74,158,255,0.25);border-color:#4a9eff"></div> Entry</div>
+    <div class="leg"><div class="leg-box" style="background:rgba(80,200,120,0.3);border-color:#50c878"></div> Naam</div>
+    <div class="leg"><div class="leg-box" style="background:rgba(255,160,60,0.3);border-color:#ffa03c"></div> Adres</div>
+  </div>
+</div>
+
+<div id="main">
+  <div id="scan-panel">
+    <div id="scan-container">
+      <img id="scan-img" alt="scan">
+      <canvas id="overlay"></canvas>
+      <div id="loading">Laden…</div>
+    </div>
+  </div>
+  <div id="sidebar">
+    <div id="sidebar-header">Vermeldingen</div>
+    <div id="entry-list"></div>
+    <div id="detail"><div id="detail-empty">Klik op een vermelding</div></div>
+  </div>
+</div>
+
+<div id="tooltip"></div>
+
+<script>
+const img = document.getElementById('scan-img');
+const canvas = document.getElementById('overlay');
+const ctx = canvas.getContext('2d');
+const entryList = document.getElementById('entry-list');
+const detail = document.getElementById('detail');
+const tooltip = document.getElementById('tooltip');
+const loading = document.getElementById('loading');
+const pageSelect = document.getElementById('page-select');
+const pageInfo = document.getElementById('page-info');
+
+let stems = [];
+let currentIdx = 0;
+let pageData = null;
+let activeEntry = null;
+let hoverEntry = null;
+
+// ── colours ──────────────────────────────────────────────────────────
+const COL_ENTRY      = { fill: 'rgba(74,158,255,0.12)', stroke: 'rgba(74,158,255,0.7)' };
+const COL_ENTRY_HOV  = { fill: 'rgba(74,158,255,0.30)', stroke: 'rgba(74,158,255,1)' };
+const COL_ENTRY_ACT  = { fill: 'rgba(26,90,180,0.40)', stroke: '#4a9eff' };
+const COL_NAME       = { fill: 'rgba(80,200,120,0.20)', stroke: 'rgba(80,200,120,0.9)' };
+const COL_ADDR       = { fill: 'rgba(255,160,60,0.20)', stroke: 'rgba(255,160,60,0.9)' };
+
+// ── init ─────────────────────────────────────────────────────────────
+fetch('manifest.json')
+  .then(r => r.json())
+  .then(m => {
+    stems = m.stems;
+    stems.forEach((s, i) => {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = s;
+      pageSelect.appendChild(opt);
+    });
+    loadPage(m.start_index ?? 0);
+  });
+
+pageSelect.addEventListener('change', () => loadPage(+pageSelect.value));
+document.getElementById('btn-prev').addEventListener('click', () => loadPage(currentIdx - 1));
+document.getElementById('btn-next').addEventListener('click', () => loadPage(currentIdx + 1));
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowLeft')  loadPage(currentIdx - 1);
+  if (e.key === 'ArrowRight') loadPage(currentIdx + 1);
+});
+
+// ── page loading ──────────────────────────────────────────────────────
+function loadPage(idx) {
+  if (idx < 0 || idx >= stems.length) return;
+  currentIdx = idx;
+  pageSelect.value = idx;
+  document.getElementById('btn-prev').disabled = idx === 0;
+  document.getElementById('btn-next').disabled = idx === stems.length - 1;
+  pageData = null;
+  activeEntry = null;
+  hoverEntry = null;
+
+  loading.style.display = 'flex';
+  img.style.opacity = '0.3';
+  clearCanvas();
+  entryList.innerHTML = '';
+  detail.innerHTML = '<div id="detail-empty">Laden…</div>';
+
+  const stem = stems[idx];
+  const imgSrc = `../scans/${stem}.jpg`;
+  const jsonSrc = `../output/json/${stem}.json`;
+
+  // load both in parallel
+  Promise.all([
+    loadImage(imgSrc),
+    fetch(jsonSrc).then(r => r.json())
+  ]).then(([, data]) => {
+    pageData = data;
+    loading.style.display = 'none';
+    img.style.opacity = '1';
+    const label = `Scan ${stem.split('_').pop()} — blz. ${data.page_number ?? '?'} (${data.section ?? ''})`;
+    pageInfo.textContent = label;
+    // update select label
+    pageSelect.options[idx].textContent = `${stem.split('_').pop()} · blz. ${data.page_number ?? '?'}`;
+    buildSidebar(data);
+    renderOverlay();
+  }).catch(err => {
+    loading.style.display = 'none';
+    img.style.opacity = '1';
+    pageInfo.textContent = `Fout: ${err.message}`;
+  });
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    let done = false;
+    function finish() {
+      if (done) return;
+      done = true;
+      // defer so the browser has time to lay out the image before we read clientWidth
+      requestAnimationFrame(() => { syncCanvas(); resolve(); });
+    }
+    img.onload  = finish;
+    img.onerror = reject;
+    img.src = src;
+    // cached images may already be complete before onload fires
+    if (img.complete && img.naturalWidth) finish();
+  });
+}
+
+// ── canvas sync ───────────────────────────────────────────────────────
+function syncCanvas() {
+  const w = img.clientWidth  || img.naturalWidth;
+  const h = img.clientHeight || img.naturalHeight;
+  if (!w || !h) return;
+  canvas.width  = w;
+  canvas.height = h;
+  canvas.style.width  = w + 'px';
+  canvas.style.height = h + 'px';
+}
+
+const ro = new ResizeObserver(() => {
+  if (!img.naturalWidth) return;
+  syncCanvas();
+  renderOverlay();
+});
+ro.observe(img);
+
+function clearCanvas() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+// ── scale helpers ─────────────────────────────────────────────────────
+function scaleX(x) { return x * img.clientWidth  / img.naturalWidth; }
+function scaleY(y) { return y * img.clientHeight / img.naturalHeight; }
+
+function scaledRect(bbox) {
+  return {
+    x: scaleX(bbox[0]),
+    y: scaleY(bbox[1]),
+    w: scaleX(bbox[2]) - scaleX(bbox[0]),
+    h: scaleY(bbox[3]) - scaleY(bbox[1]),
+  };
+}
+
+// ── rendering ────────────────────────────────────────────────────────
+function drawBox(bbox, col, lineWidth = 1) {
+  if (!bbox || bbox.length < 4) return;
+  const r = scaledRect(bbox);
+  ctx.fillStyle   = col.fill;
+  ctx.strokeStyle = col.stroke;
+  ctx.lineWidth   = lineWidth;
+  ctx.fillRect(r.x, r.y, r.w, r.h);
+  ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+}
+
+function renderOverlay() {
+  if (!pageData) return;
+  syncCanvas();
+  clearCanvas();
+  const entries = pageData.entries || [];
+
+  entries.forEach((e, i) => {
+    const isActive = e === activeEntry;
+    const isHover  = e === hoverEntry;
+    const col = isActive ? COL_ENTRY_ACT : isHover ? COL_ENTRY_HOV : COL_ENTRY;
+    drawBox(e.entry_bbox, col, isActive || isHover ? 1.5 : 1);
+    if (isActive || isHover) {
+      drawBox(e.name_bbox,    COL_NAME, 1.5);
+      drawBox(e.address_bbox, COL_ADDR, 1.5);
+    }
+  });
+}
+
+// ── sidebar ───────────────────────────────────────────────────────────
+function buildSidebar(data) {
+  entryList.innerHTML = '';
+  detail.innerHTML = '<div id="detail-empty">Klik op een vermelding</div>';
+  const entries = data.entries || [];
+  entries.forEach((e, i) => {
+    const div = document.createElement('div');
+    div.className = 'entry-item';
+    div.dataset.idx = i;
+    const name = [e.name, e.initials, e.name_prefix].filter(Boolean).join(' ');
+    div.innerHTML = `
+      <div class="entry-name">${esc(name)}</div>
+      <div class="entry-meta">${esc(e.occupation_expanded || e.occupation || '')}</div>
+      <div class="entry-addr">${esc(e.address_full || '')}</div>
+    `;
+    div.addEventListener('click', () => selectEntry(e, div));
+    div.addEventListener('mouseenter', () => { hoverEntry = e; renderOverlay(); scrollToBbox(e.entry_bbox); });
+    div.addEventListener('mouseleave', () => { hoverEntry = null; renderOverlay(); });
+    entryList.appendChild(div);
+  });
+  pageInfo.textContent += ` — ${entries.length} vermeldingen`;
+}
+
+function selectEntry(entry, el) {
+  document.querySelectorAll('.entry-item.active').forEach(d => d.classList.remove('active'));
+  el.classList.add('active');
+  activeEntry = entry;
+  renderOverlay();
+  scrollToBbox(entry.entry_bbox);
+  showDetail(entry);
+}
+
+function showDetail(e) {
+  const rows = [
+    ['Naam',      [e.name, e.initials, e.name_prefix].filter(Boolean).join(' ')],
+    ['Beroep',    e.occupation_expanded || e.occupation],
+    ['Adres',     e.address_full],
+    ['Straat',    e.address_street_expanded || e.address_street],
+    ['Nummer',    e.address_number],
+    ['Telefoon',  e.phone],
+    ['Verwijzing',e.cross_references?.join(', ')],
+    ['Sectie',    pageData.section],
+  ].filter(([, v]) => v);
+
+  detail.innerHTML = `<h3>${esc([e.name, e.initials, e.name_prefix].filter(Boolean).join(' '))}</h3>` +
+    rows.map(([l, v]) => `<div class="field"><span class="field-label">${esc(l)}</span><span class="field-value">${esc(String(v))}</span></div>`).join('');
+}
+
+// scroll the scan so the bbox is centred in the panel
+function scrollToBbox(bbox) {
+  if (!bbox || !img.naturalWidth) return;
+  const panel = document.getElementById('scan-panel');
+  const r = scaledRect(bbox);
+  const cx = r.x + r.w / 2;
+  const cy = r.y + r.h / 2;
+  panel.scrollTo({
+    left: cx - panel.clientWidth  / 2,
+    top:  cy - panel.clientHeight / 2,
+    behavior: 'smooth',
+  });
+}
+
+// ── canvas mouse events ───────────────────────────────────────────────
+canvas.style.pointerEvents = 'auto';
+
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const hit = hitTest(mx, my);
+
+  if (hit !== hoverEntry) {
+    hoverEntry = hit;
+    renderOverlay();
+  }
+
+  if (hit) {
+    const name = [hit.name, hit.initials, hit.name_prefix].filter(Boolean).join(' ');
+    tooltip.innerHTML = `
+      <div class="tt-name">${esc(name)}</div>
+      <div class="tt-occ">${esc(hit.occupation_expanded || hit.occupation || '')}</div>
+      <div class="tt-addr">${esc(hit.address_full || '')}</div>
+    `;
+    tooltip.style.display = 'block';
+    tooltip.style.left = (e.clientX + 12) + 'px';
+    tooltip.style.top  = (e.clientY + 12) + 'px';
+  } else {
+    tooltip.style.display = 'none';
+  }
+});
+
+canvas.addEventListener('mouseleave', () => {
+  hoverEntry = null;
+  tooltip.style.display = 'none';
+  renderOverlay();
+});
+
+canvas.addEventListener('click', e => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const hit = hitTest(mx, my);
+  if (!hit) return;
+  const idx = (pageData.entries || []).indexOf(hit);
+  if (idx < 0) return;
+  const items = entryList.querySelectorAll('.entry-item');
+  if (items[idx]) {
+    selectEntry(hit, items[idx]);
+    items[idx].scrollIntoView({ block: 'nearest' });
+  }
+});
+
+function hitTest(mx, my) {
+  if (!pageData) return null;
+  // test in reverse so topmost (last drawn) entry wins
+  const entries = (pageData.entries || []).slice().reverse();
+  for (const e of entries) {
+    if (!e.entry_bbox) continue;
+    const r = scaledRect(e.entry_bbox);
+    if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) return e;
+  }
+  return null;
+}
+
+// ── util ──────────────────────────────────────────────────────────────
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+</body>
+</html>

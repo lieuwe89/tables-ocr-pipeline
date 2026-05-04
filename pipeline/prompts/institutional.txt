@@ -1,0 +1,62 @@
+You are processing a page from a 1926 Dutch address book (Adresboek van de Gemeente Groningen, 1926).
+This page is from an INSTITUTIONAL/ORGANIZATIONAL LISTINGS section (government offices, organizations, societies, services, etc.).
+
+Below is a numbered list of words detected by OCR on this page, with their IDs.
+The OCR may contain errors. Use the attached scan image as the ground truth.
+
+WORD LIST:
+{word_list}
+
+YOUR TASK:
+Parse the content of this page. Institutional pages have varied formats, including:
+- Lists of officials with their roles and addresses
+- Organization descriptions with addresses and phone numbers
+- Tables of services (transport schedules, postal services, etc.)
+- Mixed text with embedded addresses
+
+For each identifiable entity on this page, extract:
+- "entity_type": One of "organization", "person", "service", "facility", "other"
+- "name": Name of the organization, person, or service
+- "role": Role or function (for persons within organizations)
+- "address_street": Street name if present
+- "address_street_expanded": Full street name if abbreviated
+- "address_number": House number if present
+- "phone": Telephone number if present
+- "parent_organization": Name of parent organization if this is a sub-entry
+- "description": Any descriptive text
+- "word_ids": ALL word IDs
+- "name_word_ids": Word IDs forming the entity name
+- "address_word_ids": Word IDs forming the address (if any)
+
+Also identify:
+- Section headings and sub-headings
+- Any addresses mentioned anywhere on the page (even embedded in prose)
+- Headers, footers, and printed page number
+
+Return ONLY valid JSON:
+{{
+  "page_number": <int>,
+  "section": "institutional",
+  "header": {{"text": "...", "word_ids": [...]}},
+  "footer": {{"text": "...", "word_ids": [...]}},
+  "section_headings": [
+    {{"text": "...", "word_ids": [...]}}
+  ],
+  "entities": [
+    {{
+      "entity_type": "organization|person|service|facility|other",
+      "name": "...",
+      "role": null,
+      "address_street": "...",
+      "address_street_expanded": "...",
+      "address_number": "...",
+      "phone": null,
+      "parent_organization": null,
+      "description": null,
+      "word_ids": [...],
+      "name_word_ids": [...],
+      "address_word_ids": [...],
+      "notes": null
+    }}
+  ]
+}}

@@ -1,0 +1,50 @@
+You are processing a page from a 1926 Dutch address book (Adresboek van de Gemeente Groningen, 1926).
+This page contains an ADVERTISEMENT (advertentie).
+
+Below is a numbered list of words detected by OCR on this page, with their IDs.
+The OCR may contain errors. Use the attached scan image as the ground truth.
+
+WORD LIST:
+{word_list}
+
+YOUR TASK:
+Parse all advertisements on this page. A page may contain one large ad or multiple smaller ads.
+
+For each advertisement, extract:
+- "business_name": Name of the business or advertiser
+- "business_type": Type of business/service
+- "address_street": Street address if mentioned
+- "address_street_expanded": Full street name if abbreviated
+- "address_number": House number if mentioned
+- "phone": Telephone number if present
+- "description": Key text/claims from the advertisement
+- "products_services": List of products or services mentioned
+- "word_ids": ALL word IDs belonging to this ad
+- "name_word_ids": Word IDs forming the business name
+- "address_word_ids": Word IDs forming the address (if any)
+
+Also identify headers, footers, and the printed page number.
+
+Return ONLY valid JSON:
+{{
+  "page_number": <int>,
+  "section": "advertisement",
+  "header": {{"text": "...", "word_ids": [...]}},
+  "footer": {{"text": "...", "word_ids": [...]}},
+  "advertisements": [
+    {{
+      "business_name": "...",
+      "business_type": "...",
+      "address_street": "...",
+      "address_street_expanded": "...",
+      "address_number": "...",
+      "phone": null,
+      "description": "...",
+      "products_services": [],
+      "word_ids": [...],
+      "name_word_ids": [...],
+      "address_word_ids": [...],
+      "notes": null
+    }}
+  ]
+}}

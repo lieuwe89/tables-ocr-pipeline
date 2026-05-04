@@ -1,0 +1,15 @@
+# Core OCR
+pytesseract>=0.3.10
+Pillow>=10.0.0
+
+# Google AI
+google-generativeai>=0.8.0
+
+# XML processing
+lxml>=5.0.0
+
+# Utilities
+tqdm>=4.66.0
+
+# NOTE: Multipage PDF support may be added later if needed.
+# If so, add: pdf2image>=1.17.0 (requires poppler)

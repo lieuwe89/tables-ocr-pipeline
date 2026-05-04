@@ -1,0 +1,70 @@
+You are processing a page from a 1926 Dutch address book (Adresboek van de Gemeente Groningen, 1926).
+This page is from the STREET REGISTER (Alphabetische lijst der Straten, Pleinen, Grachten, enz. met hare bewoners) section.
+
+This section lists streets alphabetically, and under each street, lists the residents by house number.
+
+Below is a numbered list of words detected by OCR on this page, with their IDs.
+The OCR may contain errors. Use the attached scan image as the ground truth.
+
+WORD LIST:
+{word_list}
+
+YOUR TASK:
+Parse every entry on this page. Entries are organized by street, then by house number.
+
+For each street heading, extract:
+- "street_name": The street name as written
+- "street_name_expanded": Full form if abbreviated
+
+For each resident entry under a street, extract:
+- "address_number": House number
+- "name": Resident's family name
+- "initials": First name initials
+- "name_prefix": Titles or honorifics
+- "name_prefix_expanded": Full form of prefix
+- "occupation": Occupation as written
+- "occupation_expanded": Full form if abbreviated
+- "phone": Telephone number if present
+- "word_ids": ALL word IDs belonging to this entry
+- "name_word_ids": Word IDs forming the name
+- "address_word_ids": Word IDs forming the house number
+
+Also identify headers, footers, and the printed page number.
+
+IMPORTANT:
+1. The street name may appear as a heading with entries indented below it.
+2. When the street continues from a previous page, note this with "continued_from_previous": true.
+3. Multiple residents at the same address should each be separate entries.
+4. See the name_register prompt for common Dutch abbreviations.
+
+Return ONLY valid JSON:
+{{
+  "page_number": <int>,
+  "section": "street_register",
+  "header": {{"text": "...", "word_ids": [...]}},
+  "footer": {{"text": "...", "word_ids": [...]}},
+  "streets": [
+    {{
+      "street_name": "...",
+      "street_name_expanded": "...",
+      "street_heading_word_ids": [...],
+      "continued_from_previous": false,
+      "entries": [
+        {{
+          "address_number": "...",
+          "name": "...",
+          "initials": "...",
+          "name_prefix": "...",
+          "name_prefix_expanded": "...",
+          "occupation": "...",
+          "occupation_expanded": "...",
+          "phone": null,
+          "word_ids": [...],
+          "name_word_ids": [...],
+          "address_word_ids": [...],
+          "notes": null
+        }}
+      ]
+    }}
+  ]
+}}

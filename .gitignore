@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+.env
+
+# Project specific
+output/
+scans/
+Maps/
+tessdata/
+*.log
+checkpoint.json
+
+# Local config & Secrets
+pipeline/config_local.py
+secrets.md
+HANDOFF.md
+HANDOFF_GEOCODE.md
+CLAUDE.md
+NEXT_STEPS.md
+
+# OS
+.DS_Store
+Thumbs.db

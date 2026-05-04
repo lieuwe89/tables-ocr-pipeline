@@ -1,0 +1,43 @@
+You are processing a page from a 1926 Dutch address book (Adresboek van de Gemeente Groningen, 1926).
+The section type of this page is unknown or does not fit other categories.
+
+Below is a numbered list of words detected by OCR on this page, with their IDs.
+The OCR may contain errors. Use the attached scan image as the ground truth.
+
+WORD LIST:
+{word_list}
+
+YOUR TASK:
+1. Determine the type of content on this page (e.g., table of contents, title page, index, errata, map, etc.)
+2. Extract all readable text with word IDs
+3. Pay special attention to any ADDRESSES mentioned — extract these fully
+4. Identify any cross-references to other pages
+
+For each address found on this page, extract:
+- "address_street": Street name as written
+- "address_street_expanded": Full street name if abbreviated
+- "address_number": House number if present
+- "context": What the address relates to (a person, business, organization)
+
+Return ONLY valid JSON:
+{{
+  "page_number": <int>,
+  "section": "other",
+  "content_type": "table_of_contents|title_page|index|errata|map|unknown",
+  "header": {{"text": "...", "word_ids": [...]}},
+  "footer": {{"text": "...", "word_ids": [...]}},
+  "full_text": "...",
+  "addresses_found": [
+    {{
+      "address_street": "...",
+      "address_street_expanded": "...",
+      "address_number": "...",
+      "context": "...",
+      "address_word_ids": [...]
+    }}
+  ],
+  "cross_references": [
+    {{"text": "...", "target_page": <int>, "word_ids": [...]}}
+  ],
+  "all_word_ids": [...]
+}}
