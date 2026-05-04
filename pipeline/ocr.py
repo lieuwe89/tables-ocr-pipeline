@@ -88,6 +88,15 @@ class OcrPage:
     def word_index(self) -> dict[str, OcrWord]:
         return {w.id: w for w in self.all_words}
 
+    @property
+    def line_index(self) -> dict[str, OcrLine]:
+        """Index of all lines by their ID."""
+        lines = {}
+        for block in self.blocks:
+            for line in block.lines:
+                lines[line.id] = line
+        return lines
+
     def to_numbered_word_list(self) -> str:
         """Format words as a numbered list for the LLM prompt."""
         return "\n".join(f"{w.id}: {w.text}" for w in self.all_words)
