@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "page_number": { "type": "integer" },
+    "section": { "type": "string" },
+    "header": {
+      "type": "object",
+      "properties": {
+        "text": { "type": "string" },
+        "word_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "footer": {
+      "type": "object",
+      "properties": {
+        "text": { "type": "string" },
+        "word_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "initials": { "type": "string" },
+          "name_prefix": { "type": "string" },
+          "name_prefix_expanded": { "type": "string" },
+          "occupation": { "type": "string" },
+          "occupation_expanded": { "type": "string" },
+          "address_street": { "type": "string" },
+          "address_street_expanded": { "type": "string" },
+          "address_number": { "type": "string" },
+          "phone": { "type": ["string", "null"] },
+          "cross_references": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": { "type": "string" },
+                "page": { "type": "integer" }
+              }
+            }
+          },
+          "word_ids": { "type": "array", "items": { "type": "string" } },
+          "name_word_ids": { "type": "array", "items": { "type": "string" } },
+          "address_word_ids": { "type": "array", "items": { "type": "string" } },
+          "notes": { "type": ["string", "null"] }
+        },
+        "required": ["name", "word_ids"]
+      }
+    }
+  },
+  "required": ["entries"]
+}
