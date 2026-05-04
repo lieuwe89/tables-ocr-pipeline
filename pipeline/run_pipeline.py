@@ -115,7 +115,7 @@ def stage_ocr(scan_paths: list[Path], strategy: str = None, device: str = None) 
     for i, scan_path in enumerate(scan_paths, start=1):
         logger.info(f"[{i}/{len(scan_paths)}] OCR: {scan_path.name}")
         normalized = normalize_image(scan_path)
-        ocr_page = run_ocr(normalized, scan_path.name, strategy=strategy, device=device)
+        ocr_page = run_ocr(normalized, scan_path.name, strategy=strategy, device=device, image_path=scan_path)
         results[scan_path.name] = ocr_page
         logger.info(f"  → {len(ocr_page.all_words)} words detected")
 
@@ -317,29 +317,34 @@ def stage_ocr_llm_pipelined(
     cheaply (no LLM call). The OCR call itself is cached per page on disk,
     so re-running is fast.
     """
-    import threading
-    import queue as _queue
-    from pipeline.config import GEMINI_DELAY_SECONDS
+    from pipeline.config import GEMINI_DELAY_SECONDS, LLM_WORKERS
+    from threading import Lock
 
     logger_ocr = logging.getLogger("ocr")
     logger_llm = logging.getLogger("gemini")
     logger_ocr.info(
-        f"═══ Stages 2+3 (pipelined): Surya OCR + Gemini LLM ({len(scan_paths)} pages) ═══"
+        f"═══ Stages 2+3 (pipelined): Surya OCR + {LLM_PROVIDER.upper()} LLM ({len(scan_paths)} pages) ═══"
     )
 
     init_gemini()
     checkpoint = load_checkpoint()
+    checkpoint_lock = Lock()
 
     ocr_results: dict[str, OcrPage] = {}
     llm_results: dict[str, dict] = {}
 
-    # Bounded queue: caps memory if LLM is slower than OCR (it usually is on GPU OCR;
-    # opposite on CPU OCR — bounded queue makes the OCR producer block harmlessly).
-    q: _queue.Queue = _queue.Queue(maxsize=8)
+    # Bounded queue: caps memory if LLM is slower than OCR.
+    q: _queue.Queue = _queue.Queue(maxsize=16)
     consumer_errors: list[BaseException] = []
     counters = {"llm_calls": 0, "from_cache": 0}
+    counters_lock = Lock()
 
-    def consumer():
+    # Scale workers for local vLLM; keep 1 for rate-limited Gemini
+    num_workers = LLM_WORKERS if LLM_PROVIDER in ("vllm", "local") else 1
+    if num_workers > 1:
+        logger_llm.info(f"Scaling to {num_workers} parallel LLM workers...")
+
+    def consumer(worker_id: int):
         while True:
             item = q.get()
             try:
@@ -352,58 +357,69 @@ def stage_ocr_llm_pipelined(
                 final_json = JSON_DIR / f"{scan_path.stem}.json"
                 if not force_reprocess and final_json.exists():
                     try:
-                        llm_results[filename] = json.loads(
-                            final_json.read_text(encoding="utf-8")
-                        )
-                        counters["from_cache"] += 1
+                        res = json.loads(final_json.read_text(encoding="utf-8"))
+                        with counters_lock:
+                            llm_results[filename] = res
+                            counters["from_cache"] += 1
                         continue
                     except Exception as e:
-                        logger_llm.warning(
-                            f"  final JSON unreadable for {filename}, will redo: {e}"
-                        )
+                        logger_llm.warning(f"  final JSON unreadable for {filename}, will redo: {e}")
 
                 # 2. raw LLM cached?
                 if not force_reprocess:
                     raw = _load_llm_raw(scan_path)
                     if raw is not None:
-                        llm_results[filename] = raw
-                        counters["from_cache"] += 1
-                        if filename not in checkpoint["completed"]:
-                            checkpoint["completed"].append(filename)
-                            save_checkpoint(checkpoint)
+                        with counters_lock:
+                            llm_results[filename] = raw
+                            counters["from_cache"] += 1
+                        with checkpoint_lock:
+                            if filename not in checkpoint["completed"]:
+                                checkpoint["completed"].append(filename)
+                                save_checkpoint(checkpoint)
                         continue
 
                 # 3. call LLM.
                 page_number = get_scan_page_number(scan_path, 0)
-                logger_llm.info(f"LLM: {filename} (page {page_number})")
+                logger_llm.info(f"LLM [{worker_id}]: {filename} (page {page_number})")
                 result = process_page_with_gemini(
                     scan_image_path=scan_path,
                     ocr_page=ocr_page,
                     page_number=page_number,
                 )
-                counters["llm_calls"] += 1
+                
+                with counters_lock:
+                    counters["llm_calls"] += 1
+                
                 if result is not None:
                     _save_llm_raw(scan_path, result)
-                    llm_results[filename] = result
-                    if filename not in checkpoint["completed"]:
-                        checkpoint["completed"].append(filename)
-                    checkpoint["failed"] = [
-                        f for f in checkpoint["failed"] if f != filename
-                    ]
+                    with counters_lock:
+                        llm_results[filename] = result
+                    with checkpoint_lock:
+                        if filename not in checkpoint["completed"]:
+                            checkpoint["completed"].append(filename)
+                        checkpoint["failed"] = [f for f in checkpoint["failed"] if f != filename]
                 else:
-                    if filename not in checkpoint["failed"]:
-                        checkpoint["failed"].append(filename)
-                save_checkpoint(checkpoint)
+                    with checkpoint_lock:
+                        if filename not in checkpoint["failed"]:
+                            checkpoint["failed"].append(filename)
+                
+                with checkpoint_lock:
+                    save_checkpoint(checkpoint)
 
-                time.sleep(GEMINI_DELAY_SECONDS)
+                if num_workers == 1:
+                    time.sleep(GEMINI_DELAY_SECONDS)
+                    
             except BaseException as e:
                 consumer_errors.append(e)
                 logger_llm.exception(f"LLM consumer error on item: {e}")
             finally:
                 q.task_done()
 
-    t = threading.Thread(target=consumer, name="llm-worker", daemon=True)
-    t.start()
+    workers = []
+    for i in range(num_workers):
+        t = threading.Thread(target=consumer, args=(i,), name=f"llm-worker-{i}", daemon=True)
+        t.start()
+        workers.append(t)
 
     try:
         for i, scan_path in enumerate(scan_paths, start=1):
@@ -414,14 +430,14 @@ def stage_ocr_llm_pipelined(
             logger_ocr.info(f"  → {len(ocr_page.all_words)} words detected")
             q.put((scan_path, ocr_page))
     finally:
-        q.put(None)
-        logger_llm.info("OCR producer done; waiting for LLM worker to drain queue...")
-        t.join()
+        for _ in range(num_workers):
+            q.put(None)
+        logger_llm.info("OCR producer done; waiting for LLM workers to drain queue...")
+        for t in workers:
+            t.join()
 
     if consumer_errors:
-        # Surface the first error but continue to retry pass — partial progress
-        # is already on disk.
-        logger_llm.error(f"LLM worker had {len(consumer_errors)} errors; first: {consumer_errors[0]}")
+        logger_llm.error(f"LLM worker pool had {len(consumer_errors)} errors")
 
     logger_llm.info(
         f"Pipelined OCR+LLM complete: {counters['llm_calls']} LLM calls, "
