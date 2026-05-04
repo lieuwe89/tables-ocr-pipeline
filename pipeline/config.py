@@ -27,8 +27,9 @@ FAILURES_DIR = OUTPUT_DIR / "failures"  # Per-page structured failure records
 COMBINED_DIR = OUTPUT_DIR / "combined"
 PAGEXML_DIR = OUTPUT_DIR / "pagexml"
 
-# Prompts directory
+# Prompts and Schemas
 PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
+SCHEMAS_DIR = Path(__file__).resolve().parent / "schemas"
 
 # Checkpoint file for resumable processing
 CHECKPOINT_FILE = OUTPUT_DIR / "checkpoint.json"
@@ -56,6 +57,9 @@ OPENROUTER_FALLBACK_MODEL = "google/gemini-2.5-flash"
 # vLLM (Local DGX Spark Backend)
 VLLM_API_BASE = os.environ.get("VLLM_API_BASE", "http://localhost:8000/v1")
 VLLM_MODEL = os.environ.get("VLLM_MODEL", "microsoft/Florence-2-large")
+
+# Parallelism
+LLM_WORKERS = int(os.environ.get("LLM_WORKERS", 1))
 
 # Rate limiting. OpenRouter has no per-minute cap on its end for paid usage,
 # but we still pace requests to be polite and stay under upstream provider limits.
