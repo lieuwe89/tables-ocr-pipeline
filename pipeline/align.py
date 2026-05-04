@@ -107,20 +107,39 @@ def validate_word_ids(
 
 def resolve_bbox_for_word_ids(
     word_ids: list[str],
-    word_index: dict[str, OcrWord],
+    ocr_page: OcrPage,
     context: str = "",
 ) -> list[int] | None:
     """
     Get the merged bounding box for a list of word IDs.
     
+    Vertical bounds (y1, y2) are 'snapped' to the parent line bboxes for 
+    stability. Horizontal bounds (x1, x2) use the words themselves for precision.
+    
     Returns None if no valid word IDs are found.
     """
+    word_index = ocr_page.word_index
+    line_index = ocr_page.line_index
+    
     valid_ids, _ = validate_word_ids(word_ids, word_index, context)
     if not valid_ids:
         return None
     
-    bboxes = [word_index[wid].bbox for wid in valid_ids]
-    return merge_bboxes(bboxes)
+    words = [word_index[wid] for wid in valid_ids]
+    word_bboxes = [w.bbox for w in words]
+    
+    # Start with the union of word bboxes
+    merged = merge_bboxes(word_bboxes)
+    
+    # Snap vertical bounds to the union of lines
+    line_ids = {w.line_id for w in words if w.line_id in line_index}
+    if line_ids:
+        line_bboxes = [line_index[lid].bbox for lid in line_ids]
+        lines_merged = merge_bboxes(line_bboxes)
+        merged[1] = lines_merged[1]  # Snap y1
+        merged[3] = lines_merged[3]  # Snap y2
+    
+    return merged
 
 
 def fuzzy_find_word(
@@ -197,13 +216,13 @@ def align_entry(
     address_word_ids = entry["address_word_ids"]
 
     entry["entry_bbox"] = resolve_bbox_for_word_ids(
-        word_ids, word_index, context=f"entry '{entry_id}'"
+        word_ids, ocr_page, context=f"entry '{entry_id}'"
     )
     entry["name_bbox"] = resolve_bbox_for_word_ids(
-        name_word_ids, word_index, context=f"name of '{entry_id}'"
+        name_word_ids, ocr_page, context=f"name of '{entry_id}'"
     )
     entry["address_bbox"] = resolve_bbox_for_word_ids(
-        address_word_ids, word_index, context=f"address of '{entry_id}'"
+        address_word_ids, ocr_page, context=f"address of '{entry_id}'"
     )
     
     # Build the searchable text from all fields
@@ -279,7 +298,7 @@ def align_page(
         if region_data and "word_ids" in region_data:
             region_data["word_ids"] = _coerce_word_ids(region_data["word_ids"])
             region_data["bbox"] = resolve_bbox_for_word_ids(
-                region_data["word_ids"], word_index, context=region
+                region_data["word_ids"], ocr_page, context=region
             )
     
     # Align entries based on section type
@@ -296,7 +315,7 @@ def align_page(
             # Resolve street heading bbox
             heading_ids = street.get("street_heading_word_ids", [])
             street["heading_bbox"] = resolve_bbox_for_word_ids(
-                heading_ids, word_index, context=f"street '{street.get('street_name')}'"
+                heading_ids, ocr_page, context=f"street '{street.get('street_name')}'"
             )
             for entry in street.get("entries", []):
                 # Street register entries inherit the street name
@@ -312,7 +331,7 @@ def align_page(
         for occ in gemini_result.get("occupations", []):
             heading_ids = occ.get("heading_word_ids", [])
             occ["heading_bbox"] = resolve_bbox_for_word_ids(
-                heading_ids, word_index,
+                heading_ids, ocr_page,
                 context=f"occupation '{occ.get('occupation_name')}'"
             )
             for entry in occ.get("entries", []):
@@ -336,7 +355,7 @@ def align_page(
             addr["uid"] = f"{stem}:{i:04d}"
             addr_ids = addr.get("address_word_ids", [])
             addr["address_bbox"] = resolve_bbox_for_word_ids(
-                addr_ids, word_index, context="generic address"
+                addr_ids, ocr_page, context="generic address"
             )
     
     return gemini_result
