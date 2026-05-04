@@ -6,8 +6,10 @@ precise word-level bounding boxes. This is the critical bridge that gives
 us both intelligent text understanding AND pixel-accurate highlighting.
 """
 
+import hashlib
 import logging
 from difflib import SequenceMatcher
+from pathlib import Path
 
 from pipeline.ocr import OcrPage, OcrWord
 
@@ -142,6 +144,34 @@ def fuzzy_find_word(
     return best_match
 
 
+def _normalize_text(text: str | None) -> str:
+    """Normalize text for fingerprinting: lowercase, alphanumeric only."""
+    if not text:
+        return ""
+    # Keep alphanumeric characters and lowercase everything
+    return "".join(c for c in str(text).lower() if c.isalnum())
+
+
+def calculate_fingerprint(entry: dict) -> str:
+    """
+    Calculate a stable fingerprint for an entry based on its content.
+    Uses SHA1 of normalized name, address, and occupation.
+    """
+    # Use expanded fields where possible for better stability
+    name = entry.get("name") or entry.get("business_name") or ""
+    address = entry.get("address_full") or ""
+    occ = entry.get("occupation_expanded") or entry.get("occupation") or ""
+    
+    # Combine normalized strings
+    payload = "|".join([
+        _normalize_text(name),
+        _normalize_text(address),
+        _normalize_text(occ)
+    ])
+    
+    return hashlib.sha1(payload.encode("utf-8")).hexdigest()
+
+
 def align_entry(
     entry: dict,
     ocr_page: OcrPage,
@@ -205,6 +235,9 @@ def align_entry(
     else:
         entry["address_full"] = None
     
+    # Calculate fingerprint for stabilization
+    entry["fingerprint"] = calculate_fingerprint(entry)
+    
     # Validate word IDs
     all_ids = word_ids + name_word_ids + address_word_ids
     valid, invalid = validate_word_ids(all_ids, word_index, context=entry_id)
@@ -231,6 +264,7 @@ def align_page(
     """
     section = gemini_result.get("section", "generic")
     word_index = ocr_page.word_index
+    stem = Path(ocr_page.scan_file).stem
     
     # Add page dimensions
     gemini_result["dimensions"] = {
@@ -251,11 +285,13 @@ def align_page(
     # Align entries based on section type
     if section == "name_register":
         entries = gemini_result.get("entries", [])
-        for entry in entries:
+        for i, entry in enumerate(entries):
+            entry["uid"] = f"{stem}:{i:04d}"
             align_entry(entry, ocr_page)
         _report_alignment_stats(entries, ocr_page.scan_file)
     
     elif section == "street_register":
+        i = 0
         for street in gemini_result.get("streets", []):
             # Resolve street heading bbox
             heading_ids = street.get("street_heading_word_ids", [])
@@ -267,9 +303,12 @@ def align_page(
                 if not entry.get("address_street"):
                     entry["address_street"] = street.get("street_name")
                     entry["address_street_expanded"] = street.get("street_name_expanded")
+                entry["uid"] = f"{stem}:{i:04d}"
                 align_entry(entry, ocr_page)
+                i += 1
     
     elif section == "occupation_register":
+        i = 0
         for occ in gemini_result.get("occupations", []):
             heading_ids = occ.get("heading_word_ids", [])
             occ["heading_bbox"] = resolve_bbox_for_word_ids(
@@ -277,19 +316,24 @@ def align_page(
                 context=f"occupation '{occ.get('occupation_name')}'"
             )
             for entry in occ.get("entries", []):
+                entry["uid"] = f"{stem}:{i:04d}"
                 align_entry(entry, ocr_page)
+                i += 1
     
     elif section == "institutional":
-        for entity in gemini_result.get("entities", []):
+        for i, entity in enumerate(gemini_result.get("entities", [])):
+            entity["uid"] = f"{stem}:{i:04d}"
             align_entry(entity, ocr_page)
     
     elif section == "advertisement":
-        for ad in gemini_result.get("advertisements", []):
+        for i, ad in enumerate(gemini_result.get("advertisements", [])):
+            ad["uid"] = f"{stem}:{i:04d}"
             align_entry(ad, ocr_page)
     
     else:
         # Generic: align any addresses found
-        for addr in gemini_result.get("addresses_found", []):
+        for i, addr in enumerate(gemini_result.get("addresses_found", [])):
+            addr["uid"] = f"{stem}:{i:04d}"
             addr_ids = addr.get("address_word_ids", [])
             addr["address_bbox"] = resolve_bbox_for_word_ids(
                 addr_ids, word_index, context="generic address"
