@@ -134,29 +134,24 @@ def _encode_image_data_url(image_path: Path) -> str:
     return f"data:{mime};base64,{base64.b64encode(image_path.read_bytes()).decode('ascii')}"
 
 
-def _call_openrouter(prompt: str, image_path: Path, timeout: int = 120) -> tuple[str, dict]:
-    """Send prompt + image via OpenRouter's OpenAI-compatible chat completion API.
+def _call_openrouter(prompt: str, image_paths: Path | list[Path], timeout: int = 120) -> tuple[str, dict]:
+    """Send prompt + image(s) via OpenRouter."""
+    if isinstance(image_paths, Path):
+        image_paths = [image_paths]
+        
+    content = [{"type": "text", "text": prompt}]
+    for img in image_paths:
+        content.append({
+            "type": "image_url",
+            "image_url": {"url": _encode_image_data_url(img)},
+        })
 
-    Returns (response_text, usage_dict). Usage has prompt_tokens,
-    completion_tokens, total_tokens. May be empty if the provider didn't return usage.
-    """
     response = _client.chat.completions.create(
         model=_client_model,
         timeout=timeout,
         temperature=0.1,
         max_tokens=65536,
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": _encode_image_data_url(image_path)},
-                    },
-                ],
-            }
-        ],
+        messages=[{"role": "user", "content": content}],
         extra_headers={
             "HTTP-Referer": "https://github.com/groningen-adresboek-1926",
             "X-Title": "Groningen Adresboek 1926 Pipeline",
@@ -174,25 +169,24 @@ def _call_openrouter(prompt: str, image_path: Path, timeout: int = 120) -> tuple
     return (response.choices[0].message.content or ""), usage
 
 
-def _call_vllm(prompt: str, image_path: Path, timeout: int = 120) -> tuple[str, dict]:
-    """Send prompt + image via local vLLM OpenAI-compatible API."""
+def _call_vllm(prompt: str, image_paths: Path | list[Path], timeout: int = 120) -> tuple[str, dict]:
+    """Send prompt + image(s) via local vLLM."""
+    if isinstance(image_paths, Path):
+        image_paths = [image_paths]
+        
+    content = [{"type": "text", "text": prompt}]
+    for img in image_paths:
+        content.append({
+            "type": "image_url",
+            "image_url": {"url": _encode_image_data_url(img)},
+        })
+
     response = _client.chat.completions.create(
         model=_client_model,
         timeout=timeout,
         temperature=0.1,
         max_tokens=32768,
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": _encode_image_data_url(image_path)},
-                    },
-                ],
-            }
-        ],
+        messages=[{"role": "user", "content": content}],
     )
     usage = {}
     if getattr(response, "usage", None):
@@ -206,9 +200,14 @@ def _call_vllm(prompt: str, image_path: Path, timeout: int = 120) -> tuple[str, 
     return (response.choices[0].message.content or ""), usage
 
 
-def _call_google(prompt: str, image_path: Path, timeout: int = 120) -> tuple[str, dict]:
-    """Send prompt + image via the Google AI Studio SDK."""
+def _call_google(prompt: str, image_paths: Path | list[Path], timeout: int = 120) -> tuple[str, dict]:
+    """Send prompt + image(s) via Google AI Studio."""
     from PIL import Image as PILImage
+    if isinstance(image_paths, Path):
+        image_paths = [image_paths]
+        
+    parts = [prompt] + [PILImage.open(img) for img in image_paths]
+    
     model = _client.GenerativeModel(
         _client_model,
         generation_config=_client.GenerationConfig(
@@ -217,7 +216,7 @@ def _call_google(prompt: str, image_path: Path, timeout: int = 120) -> tuple[str
         ),
     )
     response = model.generate_content(
-        [prompt, PILImage.open(image_path)],
+        parts,
         request_options={"timeout": timeout},
     )
     usage = {}
@@ -232,12 +231,12 @@ def _call_google(prompt: str, image_path: Path, timeout: int = 120) -> tuple[str
     return (response.text or ""), usage
 
 
-def _call_llm(prompt: str, image_path: Path, timeout: int = 120) -> tuple[str, dict]:
+def _call_llm(prompt: str, image_paths: Path | list[Path], timeout: int = 120) -> tuple[str, dict]:
     if LLM_PROVIDER == "openrouter":
-        return _call_openrouter(prompt, image_path, timeout=timeout)
+        return _call_openrouter(prompt, image_paths, timeout=timeout)
     elif LLM_PROVIDER == "vllm":
-        return _call_vllm(prompt, image_path, timeout=timeout)
-    return _call_google(prompt, image_path, timeout=timeout)
+        return _call_vllm(prompt, image_paths, timeout=timeout)
+    return _call_google(prompt, image_paths, timeout=timeout)
 
 
 def _save_usage_sidecar(image_path: Path, usage: dict, attempt: int, section_type: str) -> None:
@@ -334,10 +333,25 @@ def _extract_json_from_response(response_text: str) -> dict:
     return json.loads(text)
 
 
+def _crop_header(image_path: Path) -> Path:
+    """Crop the top 15% of the image to help the LLM read the header."""
+    from PIL import Image as PILImage
+    img = PILImage.open(image_path)
+    width, height = img.size
+    header_height = int(height * 0.15)
+    header = img.crop((0, 0, width, header_height))
+    
+    crop_path = image_path.parent / f"{image_path.stem}_header.tmp.jpg"
+    header.save(crop_path, quality=95)
+    return crop_path
+
+
 def identify_page_section(scan_image_path: Path, ocr_page: OcrPage) -> str:
     """
     Use Gemini to identify the section type of a page based on its visual
     layout and a snippet of OCR text.
+    
+    Uses both the full image and a high-res crop of the header for accuracy.
     """
     prompt_template = load_prompt("classify_section.txt")
     
@@ -345,12 +359,19 @@ def identify_page_section(scan_image_path: Path, ocr_page: OcrPage) -> str:
     sample_words = ocr_page.all_words[:50]
     sample_text = " ".join(w.text for w in sample_words)
     
-    prompt = prompt_template.format(ocr_sample=sample_text)
-    
-    logger.info(f"  Identifying section for {scan_image_path.name}...")
-    response_text, _ = _call_llm(prompt, scan_image_path, timeout=60)
-    
+    # Pre-process images: full page + header crop
+    header_crop_path = None
     try:
+        header_crop_path = _crop_header(scan_image_path)
+        images = [scan_image_path, header_crop_path]
+        
+        prompt = prompt_template.format(ocr_sample=sample_text)
+        # Append instruction to the prompt about the images
+        prompt += "\n\nNote: You have been provided with two images. The first is the full page. The second is a high-resolution crop of the top 15% (the header) to help you read small titles."
+
+        logger.info(f"  Identifying section for {scan_image_path.name} (with header crop)...")
+        response_text, _ = _call_llm(prompt, images, timeout=60)
+        
         result = _extract_json_from_response(response_text)
         section = result.get("section", "other")
         logger.info(f"  → Identified as '{section}' (reason: {result.get('reasoning', 'none')})")
@@ -358,6 +379,9 @@ def identify_page_section(scan_image_path: Path, ocr_page: OcrPage) -> str:
     except Exception as e:
         logger.warning(f"  Section identification failed: {e}")
         return "other"
+    finally:
+        if header_crop_path and header_crop_path.exists():
+            header_crop_path.unlink()
 
 
 def process_page_with_gemini(
