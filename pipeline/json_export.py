@@ -39,6 +39,9 @@ def export_page_json(
         }
         for w in ocr_page.all_words
     ]
+    
+    # Add the plain-text transcription for the whole page
+    aligned_result["full_text"] = ocr_page.full_text
 
     output_path = output_dir / f"{stem}.json"
     with open(output_path, "w", encoding="utf-8") as f:
@@ -100,6 +103,7 @@ def build_combined_indexes(
                 "scan_file": scan_file,
                 "page_number": page_number,
                 "section": section,
+                "type": entry.get("type", "entry"), # entry, entity, ad, page_text
                 "name": entry.get("name"),
                 "initials": entry.get("initials"),
                 "name_prefix": entry.get("name_prefix"),
@@ -184,7 +188,6 @@ def _collect_entries_for_index(result: dict) -> list[dict]:
     elif section == "street_register":
         for street in result.get("streets", []):
             for entry in street.get("entries", []):
-                # Inherit street name if not set on entry
                 if not entry.get("address_street"):
                     entry["address_street"] = street.get("street_name")
                     entry["address_street_expanded"] = street.get("street_name_expanded")
@@ -203,13 +206,12 @@ def _collect_entries_for_index(result: dict) -> list[dict]:
 
     elif section == "advertisement":
         for ad in result.get("advertisements", []):
-            # Normalize ad entries to have a "name" field
             if not ad.get("name"):
                 ad["name"] = ad.get("business_name")
+            ad["type"] = "advertisement"
             entries.append(ad)
 
-    elif section == "other":
-        # Create synthetic entries from found addresses
+    elif section == "other" or section == "generic":
         for addr in result.get("addresses_found", []):
             entries.append({
                 "name": addr.get("context", "Unknown"),
@@ -222,7 +224,18 @@ def _collect_entries_for_index(result: dict) -> list[dict]:
                 ).strip() or None,
                 "word_ids": addr.get("address_word_ids", []),
                 "address_word_ids": addr.get("address_word_ids", []),
+                "type": "entry",
             })
+
+    # If NO entries were found (even in name_register etc.), or if it's an 'untyped' page,
+    # add a fallback entry representing the full text of the page.
+    if not entries and result.get("full_text"):
+        entries.append({
+            "name": f"Page {result.get('page_number', 'Text')}",
+            "searchable_text": result.get("full_text", ""),
+            "type": "page_text",
+            "section": section,
+        })
 
     return entries
 
