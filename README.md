@@ -2,7 +2,7 @@
 
 A modular, high-performance OCR and LLM-based extraction pipeline designed for historical Dutch documents, specifically optimized for table-heavy registers (address books, census records, civil registers, etc.).
 
-This pipeline was originally developed for the **1926 Groningen Address Book** pilot project, but is designed to be engine-agnostic and easily adaptable to any archival source requiring structured data extraction from scanned images.
+This pipeline is designed to be engine-agnostic and easily adaptable to any archival source requiring structured data extraction from scanned images.
 
 ## Features
 
