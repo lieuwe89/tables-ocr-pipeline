@@ -67,7 +67,7 @@ SURYA_LANGS = ["nl", "en"]
 OCR_STRATEGY = os.environ.get("OCR_STRATEGY", "auto")
 
 # OCR Device: "cpu", "cuda", "mps", "directml", or "auto"
-OCR_DEVICE = os.environ.get("OCR_DEVICE", "auto")
+OCR_DEVICE = os.environ.get("OCR_DEVICE", "cuda")
 
 # Loghi Model Path (swappable)
 LOGHI_MODEL_PATH = os.environ.get("LOGHI_MODEL_PATH", None)
