@@ -30,6 +30,7 @@ from pipeline.config import (
     OPENROUTER_BASE_URL,
     OPENROUTER_MODEL,
     PROMPTS_DIR,
+    SCHEMAS_DIR,
     get_section_for_page,
 )
 from pipeline.ocr import OcrPage
@@ -50,6 +51,25 @@ def load_prompt(prompt_filename: str) -> str:
             raise FileNotFoundError(f"Prompt template not found: {prompt_path}")
         _prompt_cache[prompt_filename] = prompt_path.read_text(encoding="utf-8")
     return _prompt_cache[prompt_filename]
+
+
+# ── Schema loading ────────────────────────────────────────────────────────────
+
+_schema_cache: dict[str, dict] = {}
+
+
+def load_schema(section_name: str) -> dict | None:
+    """Load and cache a JSON schema for a section from the schemas directory."""
+    if section_name not in _schema_cache:
+        schema_path = SCHEMAS_DIR / f"{section_name}.json"
+        if not schema_path.exists():
+            return None
+        try:
+            _schema_cache[section_name] = json.loads(schema_path.read_text(encoding="utf-8"))
+        except Exception as e:
+            logger.warning(f"Failed to load schema for {section_name}: {e}")
+            return None
+    return _schema_cache[section_name]
 
 
 # ── Checkpoint management ─────────────────────────────────────────────────────
@@ -134,7 +154,7 @@ def _encode_image_data_url(image_path: Path) -> str:
     return f"data:{mime};base64,{base64.b64encode(image_path.read_bytes()).decode('ascii')}"
 
 
-def _call_openrouter(prompt: str, image_paths: Path | list[Path], timeout: int = 120) -> tuple[str, dict]:
+def _call_openrouter(prompt: str, image_paths: Path | list[Path], timeout: int = 120, schema: dict | None = None) -> tuple[str, dict]:
     """Send prompt + image(s) via OpenRouter."""
     if isinstance(image_paths, Path):
         image_paths = [image_paths]
@@ -146,17 +166,29 @@ def _call_openrouter(prompt: str, image_paths: Path | list[Path], timeout: int =
             "image_url": {"url": _encode_image_data_url(img)},
         })
 
-    response = _client.chat.completions.create(
-        model=_client_model,
-        timeout=timeout,
-        temperature=0.1,
-        max_tokens=65536,
-        messages=[{"role": "user", "content": content}],
-        extra_headers={
+    kwargs = {
+        "model": _client_model,
+        "timeout": timeout,
+        "temperature": 0.1,
+        "max_tokens": 65536,
+        "messages": [{"role": "user", "content": content}],
+        "extra_headers": {
             "HTTP-Referer": "https://github.com/groningen-adresboek-1926",
             "X-Title": "Groningen Adresboek 1926 Pipeline",
         },
-    )
+    }
+    
+    if schema:
+        kwargs["response_format"] = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "extraction",
+                "strict": True,
+                "schema": schema
+            }
+        }
+
+    response = _client.chat.completions.create(**kwargs)
     usage = {}
     if getattr(response, "usage", None):
         u = response.usage
@@ -169,7 +201,7 @@ def _call_openrouter(prompt: str, image_paths: Path | list[Path], timeout: int =
     return (response.choices[0].message.content or ""), usage
 
 
-def _call_vllm(prompt: str, image_paths: Path | list[Path], timeout: int = 120) -> tuple[str, dict]:
+def _call_vllm(prompt: str, image_paths: Path | list[Path], timeout: int = 120, schema: dict | None = None) -> tuple[str, dict]:
     """Send prompt + image(s) via local vLLM."""
     if isinstance(image_paths, Path):
         image_paths = [image_paths]
@@ -181,13 +213,25 @@ def _call_vllm(prompt: str, image_paths: Path | list[Path], timeout: int = 120) 
             "image_url": {"url": _encode_image_data_url(img)},
         })
 
-    response = _client.chat.completions.create(
-        model=_client_model,
-        timeout=timeout,
-        temperature=0.1,
-        max_tokens=32768,
-        messages=[{"role": "user", "content": content}],
-    )
+    kwargs = {
+        "model": _client_model,
+        "timeout": timeout,
+        "temperature": 0.1,
+        "max_tokens": 32768,
+        "messages": [{"role": "user", "content": content}],
+    }
+    
+    if schema:
+        kwargs["response_format"] = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "extraction",
+                "strict": True,
+                "schema": schema
+            }
+        }
+
+    response = _client.chat.completions.create(**kwargs)
     usage = {}
     if getattr(response, "usage", None):
         u = response.usage
@@ -200,7 +244,7 @@ def _call_vllm(prompt: str, image_paths: Path | list[Path], timeout: int = 120) 
     return (response.choices[0].message.content or ""), usage
 
 
-def _call_google(prompt: str, image_paths: Path | list[Path], timeout: int = 120) -> tuple[str, dict]:
+def _call_google(prompt: str, image_paths: Path | list[Path], timeout: int = 120, schema: dict | None = None) -> tuple[str, dict]:
     """Send prompt + image(s) via Google AI Studio."""
     from PIL import Image as PILImage
     if isinstance(image_paths, Path):
@@ -208,12 +252,18 @@ def _call_google(prompt: str, image_paths: Path | list[Path], timeout: int = 120
         
     parts = [prompt] + [PILImage.open(img) for img in image_paths]
     
+    gen_config = {
+        "temperature": 0.1,
+        "max_output_tokens": 32768,
+    }
+    
+    if schema:
+        gen_config["response_mime_type"] = "application/json"
+        gen_config["response_schema"] = schema
+
     model = _client.GenerativeModel(
         _client_model,
-        generation_config=_client.GenerationConfig(
-            temperature=0.1,
-            max_output_tokens=32768,
-        ),
+        generation_config=_client.GenerationConfig(**gen_config),
     )
     response = model.generate_content(
         parts,
@@ -231,12 +281,12 @@ def _call_google(prompt: str, image_paths: Path | list[Path], timeout: int = 120
     return (response.text or ""), usage
 
 
-def _call_llm(prompt: str, image_paths: Path | list[Path], timeout: int = 120) -> tuple[str, dict]:
+def _call_llm(prompt: str, image_paths: Path | list[Path], timeout: int = 120, schema: dict | None = None) -> tuple[str, dict]:
     if LLM_PROVIDER == "openrouter":
-        return _call_openrouter(prompt, image_paths, timeout=timeout)
+        return _call_openrouter(prompt, image_paths, timeout=timeout, schema=schema)
     elif LLM_PROVIDER == "vllm":
-        return _call_vllm(prompt, image_paths, timeout=timeout)
-    return _call_google(prompt, image_paths, timeout=timeout)
+        return _call_vllm(prompt, image_paths, timeout=timeout, schema=schema)
+    return _call_google(prompt, image_paths, timeout=timeout, schema=schema)
 
 
 def _save_usage_sidecar(image_path: Path, usage: dict, attempt: int, section_type: str) -> None:
@@ -432,12 +482,17 @@ def process_page_with_gemini(
     word_list_str = ocr_page.to_numbered_word_list()
     prompt = prompt_template.format(word_list=word_list_str)
 
+    # Load explicit schema if available
+    schema = load_schema(section_type)
+    if schema:
+        logger.info(f"  Using explicit JSON schema for '{section_type}'")
+
     response_text = ""
     last_error_class = "unknown"
     last_error_message = ""
     for attempt in range(1, max_retries + 1):
         try:
-            response_text, usage = _call_llm(prompt, scan_image_path, timeout=120)
+            response_text, usage = _call_llm(prompt, scan_image_path, timeout=120, schema=schema)
 
             if not response_text:
                 last_error_class = "empty_response"
