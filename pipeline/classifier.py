@@ -48,7 +48,13 @@ def classify_page(image: Image.Image, image_path: Path | None = None) -> PageTyp
         fname = image_path.name if image_path else "unknown"
         logger.debug(f"Classifying page {fname}...")
         
-        response_text, _ = _call_llm(prompt, image_path, timeout=30)
+        # Hardcode Gemini Flash for classification to keep costs near-zero
+        from pipeline.config import LLM_PROVIDER
+        flash_model = "gemini-1.5-flash"
+        if LLM_PROVIDER == "openrouter":
+            flash_model = "google/gemini-flash-1.5"
+        
+        response_text, _ = _call_llm(prompt, image_path, timeout=30, model_override=flash_model)
         result = _extract_json_from_response(response_text)
         page_type_str = result.get("type", "print").lower()
         
