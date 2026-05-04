@@ -154,7 +154,7 @@ def _encode_image_data_url(image_path: Path) -> str:
     return f"data:{mime};base64,{base64.b64encode(image_path.read_bytes()).decode('ascii')}"
 
 
-def _call_openrouter(prompt: str, image_paths: Path | list[Path], timeout: int = 120, schema: dict | None = None) -> tuple[str, dict]:
+def _call_openrouter(prompt: str, image_paths: Path | list[Path], timeout: int = 120, schema: dict | None = None, model_override: str | None = None) -> tuple[str, dict]:
     """Send prompt + image(s) via OpenRouter."""
     if isinstance(image_paths, Path):
         image_paths = [image_paths]
@@ -166,8 +166,9 @@ def _call_openrouter(prompt: str, image_paths: Path | list[Path], timeout: int =
             "image_url": {"url": _encode_image_data_url(img)},
         })
 
+    active_model = model_override or _client_model
     kwargs = {
-        "model": _client_model,
+        "model": active_model,
         "timeout": timeout,
         "temperature": 0.1,
         "max_tokens": 65536,
@@ -193,7 +194,7 @@ def _call_openrouter(prompt: str, image_paths: Path | list[Path], timeout: int =
     if getattr(response, "usage", None):
         u = response.usage
         usage = {
-            "model": _client_model,
+            "model": active_model,
             "prompt_tokens": getattr(u, "prompt_tokens", None),
             "completion_tokens": getattr(u, "completion_tokens", None),
             "total_tokens": getattr(u, "total_tokens", None),
@@ -201,7 +202,7 @@ def _call_openrouter(prompt: str, image_paths: Path | list[Path], timeout: int =
     return (response.choices[0].message.content or ""), usage
 
 
-def _call_vllm(prompt: str, image_paths: Path | list[Path], timeout: int = 120, schema: dict | None = None) -> tuple[str, dict]:
+def _call_vllm(prompt: str, image_paths: Path | list[Path], timeout: int = 120, schema: dict | None = None, model_override: str | None = None) -> tuple[str, dict]:
     """Send prompt + image(s) via local vLLM."""
     if isinstance(image_paths, Path):
         image_paths = [image_paths]
@@ -213,8 +214,9 @@ def _call_vllm(prompt: str, image_paths: Path | list[Path], timeout: int = 120, 
             "image_url": {"url": _encode_image_data_url(img)},
         })
 
+    active_model = model_override or _client_model
     kwargs = {
-        "model": _client_model,
+        "model": active_model,
         "timeout": timeout,
         "temperature": 0.1,
         "max_tokens": 32768,
@@ -236,7 +238,7 @@ def _call_vllm(prompt: str, image_paths: Path | list[Path], timeout: int = 120, 
     if getattr(response, "usage", None):
         u = response.usage
         usage = {
-            "model": _client_model,
+            "model": active_model,
             "prompt_tokens": getattr(u, "prompt_tokens", None),
             "completion_tokens": getattr(u, "completion_tokens", None),
             "total_tokens": getattr(u, "total_tokens", None),
@@ -244,7 +246,7 @@ def _call_vllm(prompt: str, image_paths: Path | list[Path], timeout: int = 120, 
     return (response.choices[0].message.content or ""), usage
 
 
-def _call_google(prompt: str, image_paths: Path | list[Path], timeout: int = 120, schema: dict | None = None) -> tuple[str, dict]:
+def _call_google(prompt: str, image_paths: Path | list[Path], timeout: int = 120, schema: dict | None = None, model_override: str | None = None) -> tuple[str, dict]:
     """Send prompt + image(s) via Google AI Studio."""
     from PIL import Image as PILImage
     if isinstance(image_paths, Path):
@@ -261,8 +263,9 @@ def _call_google(prompt: str, image_paths: Path | list[Path], timeout: int = 120
         gen_config["response_mime_type"] = "application/json"
         gen_config["response_schema"] = schema
 
+    active_model = model_override or _client_model
     model = _client.GenerativeModel(
-        _client_model,
+        active_model,
         generation_config=_client.GenerationConfig(**gen_config),
     )
     response = model.generate_content(
@@ -273,7 +276,7 @@ def _call_google(prompt: str, image_paths: Path | list[Path], timeout: int = 120
     md = getattr(response, "usage_metadata", None)
     if md:
         usage = {
-            "model": _client_model,
+            "model": active_model,
             "prompt_tokens": getattr(md, "prompt_token_count", None),
             "completion_tokens": getattr(md, "candidates_token_count", None),
             "total_tokens": getattr(md, "total_token_count", None),
@@ -281,12 +284,12 @@ def _call_google(prompt: str, image_paths: Path | list[Path], timeout: int = 120
     return (response.text or ""), usage
 
 
-def _call_llm(prompt: str, image_paths: Path | list[Path], timeout: int = 120, schema: dict | None = None) -> tuple[str, dict]:
+def _call_llm(prompt: str, image_paths: Path | list[Path], timeout: int = 120, schema: dict | None = None, model_override: str | None = None) -> tuple[str, dict]:
     if LLM_PROVIDER == "openrouter":
-        return _call_openrouter(prompt, image_paths, timeout=timeout, schema=schema)
+        return _call_openrouter(prompt, image_paths, timeout=timeout, schema=schema, model_override=model_override)
     elif LLM_PROVIDER == "vllm":
-        return _call_vllm(prompt, image_paths, timeout=timeout, schema=schema)
-    return _call_google(prompt, image_paths, timeout=timeout, schema=schema)
+        return _call_vllm(prompt, image_paths, timeout=timeout, schema=schema, model_override=model_override)
+    return _call_google(prompt, image_paths, timeout=timeout, schema=schema, model_override=model_override)
 
 
 def _save_usage_sidecar(image_path: Path, usage: dict, attempt: int, section_type: str) -> None:
